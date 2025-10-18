@@ -20,10 +20,10 @@ def start_mcp_servers():
     project_root = current_file.parent
     tools_dir = project_root / "src" / "langgraphagenticai" / "tools"
 
-    # Start restaurant MCP server
+    # Start MCP servers
     restaurant_script = tools_dir / "mcp_restaurant.py"
     parking_script = tools_dir / "mcp_parking.py"
-    csv_script = tools_dir / "mcp_csv_tools.py"
+    task_script = tools_dir / "mcp_task_tools.py"
 
     processes = []
 
@@ -48,15 +48,15 @@ def start_mcp_servers():
         )
         processes.append(parking_process)
 
-        # Start CSV tools server
-        print(f"Starting CSV tools MCP server: {csv_script}")
-        csv_process = subprocess.Popen(
-            [sys.executable, str(csv_script)],
+        # Start task management server
+        print(f"Starting task management MCP server: {task_script}")
+        task_process = subprocess.Popen(
+            [sys.executable, str(task_script)],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
-        processes.append(csv_process)
+        processes.append(task_process)
 
         # Wait a bit for servers to start
         print("Waiting for servers to start...")
@@ -78,10 +78,10 @@ def start_mcp_servers():
             print("❌ Parking MCP server failed to start")
 
         try:
-            csv_response = requests.get("http://127.0.0.1:8004/mcp", timeout=5)
-            print("✅ CSV Tools MCP server is running")
+            task_response = requests.get("http://127.0.0.1:8004/mcp", timeout=5)
+            print("✅ Task Management MCP server is running")
         except:
-            print("❌ CSV Tools MCP server failed to start")
+            print("❌ Task Management MCP server failed to start")
 
         print("MCP servers started successfully!")
         print("Press Ctrl+C to stop all servers")
