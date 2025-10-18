@@ -42,7 +42,7 @@ logging.basicConfig(
         ),
     ],
 )
-# Create a logger for this module
+
 logger = logging.getLogger(__name__)
 logger.info("=" * 50)
 logger.info("GenDesign Application Starting")
