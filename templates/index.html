@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Beam Visualization</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header class="main-header">
+            <div class="header-text">
+                <img src="{{ url_for('static', filename='logo_structure.png') }}" alt="Structure Logo" class="logo">
+                <h1>GenDesign - AI Design Assistant</h1>
+                <p>Design optimal beams through natural conversation in English or German</p>
+            </div>
+        </header>
+        
+        <!-- Unified Chat Interface with File Upload -->
+        <div class="chat-section">
+            <div class="controls">
+                <span class="model-info">Using: Claude 3.5 Haiku</span>
+                <button id="clear-chat" onclick="clearChat()">Clear Chat</button>
+            </div>
+            
+            <div id="chat-messages" class="chat-messages">
+                <div class="message ai-message">
+                    <div class="message-content">
+                        <p>👋 Hello! I'm GenDesign, your AI beam design assistant. I can help you design optimal beams through natural conversation.</p>
+                        <p><strong>Try saying:</strong></p>
+                        <ul>
+                            <li>"I need a steel beam for my garage"</li>
+                            <li>"Ich brauche einen Holzbalken für mein Dach"</li>
+                            <li>"Design a 6-meter concrete beam for 20kN load"</li>
+                            <li>Or attach a JSON file with beam specifications</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-section">
+                <div class="file-attachment" style="margin-bottom: 10px;">
+                    <input type="file" id="file-input" accept=".json" style="display: none;">
+                    <button id="attach-button" onclick="document.getElementById('file-input').click()" class="attach-btn">📎 Attach JSON</button>
+                    <span id="file-name" class="file-name"></span>
+                    <button id="remove-file" onclick="removeFile()" style="display: none;">✕</button>
+                    
+                    <!-- Toggle Button (hidden by default, shown after completion) -->
+                    <div id="toggle-section" class="toggle-section" style="display: none;">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="toggle-button" onchange="handleToggle()">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-text">Toggle to Advance Mode</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="chat-input">
+                    <input type="text" id="user-input" placeholder="Describe your beam requirements or attach a JSON file..." disabled>
+                    <button id="send-button" onclick="sendMessage()" disabled>Send</button>
+                </div>
+                <div id="chat-status" class="chat-status">
+                    <span id="status-text">Initializing AI...</span>
+                    <div id="typing-indicator" class="typing-indicator" style="display: none;">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Visualization Container -->
+        <div id="plot-container">
+            <!-- The 3D plot will be rendered here -->
+        </div>
+        
+        <div id="loading-spinner" style="display: none;">
+            <div class="spinner"></div>
+            <p>Processing...</p>
+        </div>
+
+        <div id="error-message" style="display: none;">
+            <!-- Error messages will be shown here -->
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let sessionId = 'session_' + Date.now();
+        let conversationState = {};
+        let isInitialized = false;
+        let attachedFile = null;
+        let isAdvancedMode = false;
+        let currentMode = 'beam_design'; // 'beam_design' or 'langgraph'
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            await initializeChat();
+            setupEventListeners();
+            
+            // Check if there's already a plot visible
+            setTimeout(checkForExistingPlot, 100);
+            
+            // Watch for changes in the plot container
+            setupPlotObserver();
+        });
+
+        async function initializeChat() {
+            const statusText = document.getElementById('status-text');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+
+            try {
+                // Test API availability
+                const response = await fetch('/api/session/' + sessionId);
+                if (response.ok) {
+                    statusText.textContent = '✓ Ready to chat';
+                    userInput.disabled = false;
+                    sendButton.disabled = false;
+                    isInitialized = true;
+                } else {
+                    throw new Error('API not available');
+                }
+            } catch (error) {
+                statusText.textContent = '⚠ AI chat unavailable (API key not configured)';
+                userInput.placeholder = 'AI chat is not available';
+                console.warn('Chat initialization failed:', error);
+            }
+        }
+
+        function setupEventListeners() {
+            // Enter key to send message
+            document.getElementById('user-input').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+
+            // File selection handler
+            document.getElementById('file-input').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    if (file.name.endsWith('.json')) {
+                        attachedFile = file;
+                        document.getElementById('file-name').textContent = file.name;
+                        document.getElementById('remove-file').style.display = 'inline-block';
+                        document.getElementById('attach-button').textContent = '📎 File Attached';
+                    } else {
+                        alert('Please select a JSON file.');
+                        e.target.value = '';
+                    }
+                }
+            });
+        }
+
+        function setupPlotObserver() {
+            // Watch for changes in the plot container
+            const plotContainer = document.getElementById('plot-container');
+            if (plotContainer) {
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                            // Check if any added nodes are plotly graphs
+                            for (let node of mutation.addedNodes) {
+                                if (node.nodeType === 1) { // Element node
+                                    if (node.classList && node.classList.contains('plotly-graph-div')) {
+                                        // Only show toggle if we have a PASS result (check conversationState)
+                                        if (conversationState && conversationState.beam_status && conversationState.beam_status.Status === true) {
+                                            showToggleButton();
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    });
+                });
+                
+                observer.observe(plotContainer, {
+                    childList: true,
+                    subtree: true
+                });
+            }
+        }
+
+        async function sendMessage() {
+            if (!isInitialized) return;
+
+            const userInput = document.getElementById('user-input');
+            const message = userInput.value.trim();
+            
+            // Allow sending with just a file (no message required)
+            if (!message && !attachedFile) return;
+
+            // Display user message and file info if present
+            let displayMessage = message;
+            if (attachedFile && message) {
+                displayMessage = `${message} [📎 ${attachedFile.name}]`;
+            } else if (attachedFile && !message) {
+                displayMessage = `📎 Uploaded: ${attachedFile.name}`;
+            }
+            
+            addMessageToChat(displayMessage, 'user');
+            userInput.value = '';
+            
+            // Show typing indicator
+            showTypingIndicator();
+
+            try {
+                let response;
+                
+                if (currentMode === 'langgraph') {
+                    // Use LangGraph API for Sushi recommendations
+                    response = await fetch('/api/langgraph/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            message: message,
+                            session_id: sessionId
+                        })
+                    });
+                    
+                    // Check if LangGraph failed and provide fallback
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        addMessageToChat(`⚠️ LangGraph system error: ${errorData.error || 'Unknown error'}`, 'error');
+                        addMessageToChat('Switching back to beam design mode...', 'ai');
+                        
+                        // Switch back to beam design mode
+                        currentMode = 'beam_design';
+                        isAdvancedMode = false;
+                        const toggleButton = document.getElementById('toggle-button');
+                        if (toggleButton) toggleButton.checked = false;
+                        updateUIForBeamDesign();
+                        return;
+                    }
+                } else {
+                    // Use beam design API
+                    let requestOptions;
+                    
+                    if (attachedFile) {
+                        // Use FormData for file upload
+                        const formData = new FormData();
+                        formData.append('message', message || '');
+                        formData.append('model', 'claude-3-5-haiku-20241022');
+                        formData.append('session_id', sessionId);
+                        formData.append('file', attachedFile);
+                        
+                        requestOptions = {
+                            method: 'POST',
+                            body: formData
+                        };
+                    } else {
+                        // Use JSON for text-only messages
+                        requestOptions = {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({
+                                message: message,
+                                model: 'claude-3-5-haiku-20241022',
+                                session_id: sessionId
+                            })
+                        };
+                    }
+                    
+                    response = await fetch('/api/chat', requestOptions);
+                }
+                
+                const result = await response.json();
+                
+                hideTypingIndicator();
+                
+                // Clear attached file after sending
+                if (attachedFile) {
+                    removeFile();
+                }
+
+                if (result.error) {
+                    addMessageToChat(`Error: ${result.error}`, 'error');
+                } else {
+                    addMessageToChat(result.llm_response, 'ai');
+                    
+                    // Update conversation state
+                    conversationState = result;
+                    
+                    // Check if session is completed and show toggle button (only for beam design mode)
+                    if (currentMode === 'beam_design') {
+                        checkAndShowToggleButton(result);
+                        
+                        // Handle visualization if provided
+                        if (result.visualization) {
+                            renderVisualization(result.visualization);
+                        }
+                    }
+                }
+
+            } catch (error) {
+                hideTypingIndicator();
+                addMessageToChat('Connection error. Please try again.', 'error');
+                console.error('Chat error:', error);
+                // Clear attached file on error
+                if (attachedFile) {
+                    removeFile();
+                }
+            }
+        }
+
+        function addMessageToChat(message, type) {
+            const chatMessages = document.getElementById('chat-messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}-message`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'message-content';
+            
+            // Convert newlines to HTML breaks and handle markdown-style formatting
+            const formattedMessage = message
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            contentDiv.innerHTML = formattedMessage;
+            messageDiv.appendChild(contentDiv);
+            chatMessages.appendChild(messageDiv);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            document.getElementById('typing-indicator').style.display = 'inline-block';
+            document.getElementById('status-text').textContent = 'AI is thinking...';
+        }
+
+        function hideTypingIndicator() {
+            document.getElementById('typing-indicator').style.display = 'none';
+            document.getElementById('status-text').textContent = '✓ Ready to chat';
+        }
+
+        function removeFile() {
+            attachedFile = null;
+            document.getElementById('file-input').value = '';
+            document.getElementById('file-name').textContent = '';
+            document.getElementById('remove-file').style.display = 'none';
+            document.getElementById('attach-button').textContent = '📎 Attach JSON';
+        }
+
+        function clearChat() {
+            const chatMessages = document.getElementById('chat-messages');
+            chatMessages.innerHTML = `
+                <div class="message ai-message">
+                    <div class="message-content">
+                        <p>👋 Hello! I'm GenDesign, your AI beam design assistant. I can help you design optimal beams through natural conversation.</p>
+                        <p><strong>Try saying:</strong></p>
+                        <ul>
+                            <li>"I need a steel beam for my garage"</li>
+                            <li>"Ich brauche einen Holzbalken für mein Dach"</li>
+                            <li>"Design a 6-meter concrete beam for 20kN load"</li>
+                            <li>Or attach a JSON file with beam specifications</li>
+                        </ul>
+                    </div>
+                </div>
+            `;
+            
+            // Clear the Plotly visualization
+            clearPlotlyVisualization();
+            
+            // Clear session on server
+            fetch(`/api/session/${sessionId}`, { method: 'DELETE' });
+            
+            // Generate new session ID
+            sessionId = 'session_' + Date.now();
+            conversationState = {};
+            
+            // Clear any attached file
+            removeFile();
+            
+            // Hide toggle button and advanced controls
+            hideToggleButton();
+            removeAdvancedControls();
+            isAdvancedMode = false;
+            currentMode = 'beam_design';
+        }
+
+        function renderVisualization(plotlyJson) {
+            const plotContainer = document.getElementById('plot-container');
+            const graphData = JSON.parse(plotlyJson);
+            Plotly.newPlot('plot-container', graphData.data, graphData.layout);
+            
+            // Note: Toggle button is now shown only when beam status is PASS
+            // This is handled in checkAndShowToggleButton() function
+        }
+
+        function clearPlotlyVisualization() {
+            const plotContainer = document.getElementById('plot-container');
+            
+            // Clear all Plotly plots
+            if (typeof Plotly !== 'undefined') {
+                try {
+                    // Remove all Plotly plots from the container
+                    Plotly.purge(plotContainer);
+                } catch (e) {
+                    console.log('Plotly purge failed:', e);
+                }
+            }
+            
+            // Clear the container content
+            plotContainer.innerHTML = '';
+            
+            // Hide toggle button since there's no visualization
+            hideToggleButton();
+            
+            console.log('Plotly visualization cleared');
+        }
+
+        // Also check for existing plots on page load
+        function checkForExistingPlot() {
+            const plotContainer = document.getElementById('plot-container');
+            // Check if there's any content in the plot container
+            if (plotContainer && plotContainer.children.length > 0) {
+                // Only show toggle if we have a PASS result (check conversationState)
+                if (conversationState && conversationState.beam_status && conversationState.beam_status.Status === true) {
+                    showToggleButton();
+                }
+            }
+            
+            // Also check if Plotly has any plots
+            if (typeof Plotly !== 'undefined') {
+                try {
+                    const plotlyDivs = document.querySelectorAll('.plotly-graph-div');
+                    if (plotlyDivs.length > 0) {
+                        // Only show toggle if we have a PASS result (check conversationState)
+                        if (conversationState && conversationState.beam_status && conversationState.beam_status.Status === true) {
+                            showToggleButton();
+                        }
+                    }
+                } catch (e) {
+                    console.log('Plotly check failed:', e);
+                }
+            }
+        }
+
+        function showToggleButton() {
+            // Show toggle button (only called when beam status is PASS)
+            const toggleSection = document.getElementById('toggle-section');
+            toggleSection.style.display = 'flex';
+            console.log('Toggle button shown - PASS result detected');
+        }
+
+        function hideToggleButton() {
+            // Hide toggle button
+            const toggleSection = document.getElementById('toggle-section');
+            toggleSection.style.display = 'none';
+            console.log('Toggle button hidden');
+        }
+
+        function checkAndShowToggleButton(result) {
+            // Only show toggle button if there's a visualization AND the beam status is PASS
+            if (result.visualization && result.beam_status && result.beam_status.Status === true) {
+                showToggleButton();
+            }
+        }
+
+        function handleToggle() {
+            const toggleButton = document.getElementById('toggle-button');
+            const toggleText = document.querySelector('.toggle-text');
+            isAdvancedMode = toggleButton.checked;
+            
+            if (isAdvancedMode) {
+                console.log('Advanced mode enabled - switching to LangGraph (Sushi)');
+                currentMode = 'langgraph';
+                
+                // Update toggle text to show next action
+                toggleText.textContent = 'Toggle to Design Mode';
+                
+                // Keep the Plotly visualization and toggle visible when switching to Design Mode
+                // Don't clear the visualization - preserve it for the user
+                addMessageToChat('🍣 **Advanced Mode Enabled** - Now using LangGraph AI for sushi restaurant recommendations in Munich!', 'ai');
+                addMessageToChat('Ask me about the best sushi restaurants, weather conditions, or parking spots in Munich.', 'ai');
+                
+                // Update UI for LangGraph mode
+                updateUIForLangGraph();
+            } else {
+                console.log('Advanced mode disabled - switching to Beam Design');
+                currentMode = 'beam_design';
+                
+                // Update toggle text to show next action
+                toggleText.textContent = 'Toggle to Advance Mode';
+                
+                addMessageToChat('🏗️ **Standard Mode Enabled** - Back to beam design assistant!', 'ai');
+                addMessageToChat('I can help you design optimal beams through natural conversation. Try saying: "I need a steel beam for my garage"', 'ai');
+                
+                // Update UI for beam design mode
+                updateUIForBeamDesign();
+            }
+        }
+
+        function addAdvancedControls() {
+            // Add advanced controls when toggle is enabled
+            const chatInput = document.querySelector('.chat-input');
+            
+            // Check if advanced controls already exist
+            if (!document.getElementById('advanced-controls')) {
+                const advancedControls = document.createElement('div');
+                advancedControls.id = 'advanced-controls';
+                advancedControls.className = 'advanced-controls';
+                advancedControls.innerHTML = `
+                    <div class="advanced-section">
+                        <h4>🔧 Advanced Options</h4>
+                        <div class="advanced-buttons">
+                            <button onclick="exportResults()" class="advanced-btn">📊 Export Results</button>
+                            <button onclick="showDetailedAnalysis()" class="advanced-btn">🔍 Detailed Analysis</button>
+                            <button onclick="compareDesigns()" class="advanced-btn">⚖️ Compare Designs</button>
+                        </div>
+                    </div>
+                `;
+                
+                // Insert before chat input
+                chatInput.parentNode.insertBefore(advancedControls, chatInput);
+            }
+        }
+
+        function removeAdvancedControls() {
+            // Remove advanced controls when toggle is disabled
+            const advancedControls = document.getElementById('advanced-controls');
+            if (advancedControls) {
+                advancedControls.remove();
+            }
+        }
+
+        function updateUIForLangGraph() {
+            // Update placeholder text for LangGraph mode
+            const userInput = document.getElementById('user-input');
+            userInput.placeholder = 'Ask about sushi restaurants, weather, or parking in Munich...';
+            
+            // Update toggle text
+            const toggleText = document.querySelector('.toggle-text');
+            if (toggleText) {
+                toggleText.textContent = 'Toggle to Design Mode';
+            }
+        }
+
+        function updateUIForBeamDesign() {
+            // Update placeholder text for beam design mode
+            const userInput = document.getElementById('user-input');
+            userInput.placeholder = 'Describe your beam requirements or attach a JSON file...';
+            
+            // Update toggle text
+            const toggleText = document.querySelector('.toggle-text');
+            if (toggleText) {
+                toggleText.textContent = 'Toggle to Advance Mode';
+            }
+        }
+
+        function exportResults() {
+            if (conversationState.optimization_result) {
+                const data = {
+                    beam_spec: conversationState.beam_spec,
+                    optimization_result: conversationState.optimization_result,
+                    timestamp: new Date().toISOString()
+                };
+                
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `beam_design_${Date.now()}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                
+                addMessageToChat('📊 Results exported successfully!', 'ai');
+            } else {
+                addMessageToChat('No optimization results available to export.', 'error');
+            }
+        }
+
+        function showDetailedAnalysis() {
+            if (conversationState.optimization_result) {
+                const result = conversationState.optimization_result;
+                const analysis = `
+**🔍 Detailed Analysis Report:**
+
+**Original Design:**
+- Dimensions: ${conversationState.beam_spec.width_mm}×${conversationState.beam_spec.height_mm} mm
+- Volume: ${(conversationState.beam_spec.width_mm * conversationState.beam_spec.height_mm * conversationState.beam_spec.length_mm).toLocaleString()} mm³
+
+**Optimized Design:**
+- Dimensions: ${result.optimal_width}×${result.optimal_height} mm
+- Volume: ${result.optimal_volume.toLocaleString()} mm³
+- Deflection: ${result.optimal_deflection} mm
+- Volume Savings: ${result.volume_savings.toFixed(1)}%
+
+**Structural Analysis:**
+- Allowable Deflection: ${result.allowable_deflection} mm
+- Safety Factor: ${(result.allowable_deflection / result.optimal_deflection).toFixed(2)}
+                `;
+                
+                addMessageToChat(analysis, 'ai');
+            } else {
+                addMessageToChat('No detailed analysis available. Please complete an optimization first.', 'error');
+            }
+        }
+
+        function compareDesigns() {
+            if (conversationState.best_historical) {
+                const historical = conversationState.best_historical;
+                const current = conversationState.beam_spec;
+                const optimized = conversationState.optimization_result;
+                
+                const comparison = `
+**⚖️ Design Comparison:**
+
+**Current Design:**
+- Dimensions: ${current.width_mm}×${current.height_mm} mm
+- Volume: ${(current.width_mm * current.height_mm * current.length_mm).toLocaleString()} mm³
+
+**Historical Alternative:**
+- Dimensions: ${historical.width_mm}×${historical.height_mm} mm
+- Volume: ${historical.volume_mm3.toLocaleString()} mm³
+- Efficiency: ${historical.efficiency_improvement.toFixed(1)}% better
+
+**Optimized Design:**
+- Dimensions: ${optimized.optimal_width}×${optimized.optimal_height} mm
+- Volume: ${optimized.optimal_volume.toLocaleString()} mm³
+- Savings: ${optimized.volume_savings.toFixed(1)}% vs current
+                `;
+                
+                addMessageToChat(comparison, 'ai');
+            } else {
+                addMessageToChat('No comparison data available. Please complete the full workflow first.', 'error');
+            }
+        }
+    </script>
+</body>
+</html>
