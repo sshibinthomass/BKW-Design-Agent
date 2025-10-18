@@ -46,8 +46,8 @@
                     <span id="file-name" class="file-name"></span>
                     <button id="remove-file" onclick="removeFile()" style="display: none;">✕</button>
                     
-                    <!-- Toggle Button (hidden by default, shown after completion) -->
-                    <div id="toggle-section" class="toggle-section" style="display: none;">
+                    <!-- Toggle Button (always visible) -->
+                    <div id="toggle-section" class="toggle-section" style="display: flex;">
                         <label class="toggle-label">
                             <input type="checkbox" id="toggle-button" onchange="handleToggle()">
                             <span class="toggle-slider"></span>
@@ -445,24 +445,22 @@
         }
 
         function showToggleButton() {
-            // Show toggle button (only called when beam status is PASS)
+            // Toggle button is now always visible
             const toggleSection = document.getElementById('toggle-section');
             toggleSection.style.display = 'flex';
-            console.log('Toggle button shown - PASS result detected');
+            console.log('Toggle button is always visible');
         }
 
         function hideToggleButton() {
-            // Hide toggle button
+            // Toggle button is now always visible - this function is kept for compatibility
             const toggleSection = document.getElementById('toggle-section');
-            toggleSection.style.display = 'none';
-            console.log('Toggle button hidden');
+            toggleSection.style.display = 'flex';
+            console.log('Toggle button remains visible');
         }
 
         function checkAndShowToggleButton(result) {
-            // Only show toggle button if there's a visualization AND the beam status is PASS
-            if (result.visualization && result.beam_status && result.beam_status.Status === true) {
-                showToggleButton();
-            }
+            // Toggle button is now always visible - no conditions needed
+            console.log('Toggle button is always visible');
         }
 
         function handleToggle() {
@@ -491,7 +489,7 @@
                 // Update toggle text to show next action
                 toggleText.textContent = 'Toggle to Advance Mode';
                 
-                addMessageToChat('🏗️ **Standard Mode Enabled** - Back to beam design assistant!', 'ai');
+                addMessageToChat('🏗️ **Design Mode Enabled** - Back to beam design assistant!', 'ai');
                 addMessageToChat('I can help you design optimal beams through natural conversation. Try saying: "I need a steel beam for my garage"', 'ai');
                 
                 // Update UI for beam design mode
