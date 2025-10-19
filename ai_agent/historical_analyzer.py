@@ -22,7 +22,9 @@ class HistoricalAnalyzer:
         """Load historical data from CSV file."""
         try:
             if os.path.exists(self.historical_data_path):
-                self.historical_data = pd.read_csv(self.historical_data_path)
+                self.historical_data = pd.read_csv(
+                    self.historical_data_path, delimiter=";"
+                )
                 logger.info(
                     f"Loaded {len(self.historical_data)} historical beam designs"
                 )
@@ -39,7 +41,9 @@ class HistoricalAnalyzer:
         """Reload historical data from CSV file to get latest entries"""
         try:
             if os.path.exists(self.historical_data_path):
-                self.historical_data = pd.read_csv(self.historical_data_path)
+                self.historical_data = pd.read_csv(
+                    self.historical_data_path, delimiter=";"
+                )
                 logger.debug(
                     f"Reloaded {len(self.historical_data)} historical beam designs"
                 )
@@ -67,10 +71,23 @@ class HistoricalAnalyzer:
 
         try:
             # Filter by exact material and length (±5% tolerance)
+            logger.info(f"Filtering historical data for beam spec: {beam_spec}")
             material = beam_spec["material"]
             length = beam_spec["length_mm"]
             length_tolerance = length * 0.05  # 5% tolerance
-
+            logger.info(f"Length tolerance: {length_tolerance}")
+            logger.info(f"Length: {length}")
+            logger.info(f"Material: {material}")
+            logger.info(f"Historical data: {self.historical_data}")
+            logger.info(f"Status: {self.historical_data['Status']}")
+            logger.info(f"L (mm): {self.historical_data['L (mm)']}")
+            logger.info(f"V (mm^3): {self.historical_data['V (mm^3)']}")
+            logger.info(f"Status: {self.historical_data['Status']}")
+            logger.info(f"L (mm): {self.historical_data['L (mm)']}")
+            logger.info(f"V (mm^3): {self.historical_data['V (mm^3)']}")
+            logger.info(
+                f"Allowable Deflection: {self.historical_data['Allowable_Def (mm) L/240']}"
+            )
             filtered = self.historical_data[
                 (self.historical_data["Material"] == material)
                 & (self.historical_data["L (mm)"] >= length - length_tolerance)
@@ -107,6 +124,9 @@ class HistoricalAnalyzer:
                 "deflection_mm": float(best_design["Deflection (mm)"]),
                 "efficiency_improvement": efficiency_improvement,
                 "status": str(best_design["Status"]),  # Include actual status from CSV
+                "allowable_deflection_mm": float(
+                    best_design["Allowable_Def (mm) L/240"]
+                ),
             }
 
         except Exception as e:
@@ -129,7 +149,7 @@ class HistoricalAnalyzer:
         current_volume = (
             current_spec["length_mm"] * current_height * current_spec["width_mm"]
         )
-
+        logger.info(f"best historical: {best_historical}")
         return f"""
 Best Historical Design Found:
 - Material: {current_spec["material"]} (same)
@@ -137,6 +157,7 @@ Best Historical Design Found:
 - Dimensions: {best_historical["height_mm"]:.0f}×{best_historical["width_mm"]:.0f} mm
 - Volume: {best_historical["volume_mm3"]:,.0f} mm³
 - Deflection: {best_historical["deflection_mm"]:.1f} mm
+- Allowable Deflection: {best_historical["allowable_deflection_mm"]:.1f} mm
 - Status: {best_historical.get("status", "PASS")}
 
 Comparison with Current Design:

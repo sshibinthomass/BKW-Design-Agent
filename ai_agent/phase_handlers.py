@@ -147,7 +147,7 @@ Your task: Present the current beam analysis results and ask if user wants to se
                     state.beam_spec, "Best Historical Data"
                 )
             )
-
+        logger.info(f"Historical status 1: {best_historical}")
         # Get system prompt for history results with status information
         system_prompt = get_system_prompt(
             "show_history",
@@ -161,7 +161,7 @@ Your task: Present the current beam analysis results and ask if user wants to se
 Historical Database Analysis:
 {self.historical_analyzer.format_historical_context(best_historical, state.beam_spec)}
 
-Your task: Present historical comparison results, specify the Material, Height, Width, and Length of the historical alternative if available, compare with current design and put emphasis on the potential volume reduction if available, then ask if user wants optimization. Use attractive formatting (e.g., **bold**). Be clear, concise, and professional.
+Your task: Present historical comparison results, specify the Material, Height, Width, and Length of the historical alternative if available, compare with current design and put emphasis on the potential volume reduction if available, then ask if user wants optimization. Use attractive formatting (e.g., **bold**). Be clear, concise, and professional. also mention the deflection and allowable deflection of the historical alternative if available.
 """
 
         # Generate LLM response
@@ -256,6 +256,7 @@ Your task:
             else "PASS",
             state=state.to_dict(),
         )
+        logger.info(f"Historical status 2: {best_historical}")
 
         # Create enhanced context with historical comparison
         context = f"""

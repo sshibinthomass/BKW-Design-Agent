@@ -1,0 +1,4 @@
+Task ID,Task Description,Current Step,Task Status,Priority,Assigned Engineer
+T-001,Optimize given 15m Steel IPE Steel Beam Design: Beam_Design_Steel_Solver_Initial_Design_TODO_01.json,Need updates for the design,In Progress,High,John Doe
+T-002,Create Wood Beam with 10 meter Length start trying with Width 100 mm and Height 200 mm with Load of 10KN,Assigning material properties,Pending,High,John Doe
+T-003,Create Concrete Beam with 15 meter Length start trying with Width 200 mm and Height 600 mm with Load of 10KN,Assigning material properties,Pending,High,John Doe

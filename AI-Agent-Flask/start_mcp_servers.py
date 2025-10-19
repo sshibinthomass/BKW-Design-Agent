@@ -6,8 +6,6 @@ Start MCP servers for the Flask application
 import subprocess
 import sys
 import time
-import os
-import signal
 from pathlib import Path
 
 
@@ -21,33 +19,11 @@ def start_mcp_servers():
     tools_dir = project_root / "src" / "langgraphagenticai" / "tools"
 
     # Start MCP servers
-    restaurant_script = tools_dir / "mcp_restaurant.py"
-    parking_script = tools_dir / "mcp_parking.py"
     task_script = tools_dir / "mcp_task_tools.py"
 
     processes = []
 
     try:
-        # Start restaurant server
-        print(f"Starting restaurant MCP server: {restaurant_script}")
-        restaurant_process = subprocess.Popen(
-            [sys.executable, str(restaurant_script)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        processes.append(restaurant_process)
-
-        # Start parking server
-        print(f"Starting parking MCP server: {parking_script}")
-        parking_process = subprocess.Popen(
-            [sys.executable, str(parking_script)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        processes.append(parking_process)
-
         # Start task management server
         print(f"Starting task management MCP server: {task_script}")
         task_process = subprocess.Popen(
@@ -66,21 +42,9 @@ def start_mcp_servers():
         import requests
 
         try:
-            restaurant_response = requests.get("http://127.0.0.1:8002/mcp", timeout=5)
-            print("✅ Restaurant MCP server is running")
-        except:
-            print("❌ Restaurant MCP server failed to start")
-
-        try:
-            parking_response = requests.get("http://127.0.0.1:8003/mcp", timeout=5)
-            print("✅ Parking MCP server is running")
-        except:
-            print("❌ Parking MCP server failed to start")
-
-        try:
-            task_response = requests.get("http://127.0.0.1:8004/mcp", timeout=5)
+            requests.get("http://127.0.0.1:8004/mcp", timeout=5)
             print("✅ Task Management MCP server is running")
-        except:
+        except Exception:
             print("❌ Task Management MCP server failed to start")
 
         print("MCP servers started successfully!")

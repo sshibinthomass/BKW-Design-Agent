@@ -42,7 +42,7 @@
             <div class="chat-input-section">
                 <div class="file-attachment" style="margin-bottom: 10px;">
                     <input type="file" id="file-input" accept=".json" style="display: none;">
-                    <button id="attach-button" onclick="document.getElementById('file-input').click()" class="attach-btn">📎 Attach JSON</button>
+                    <button id="attach-button" onclick="document.getElementById('file-input').click()" class="attach-btn">📎 Attach Design</button>
                     <span id="file-name" class="file-name"></span>
                     <button id="remove-file" onclick="removeFile()" style="display: none;">✕</button>
                     
@@ -346,7 +346,7 @@
             document.getElementById('file-input').value = '';
             document.getElementById('file-name').textContent = '';
             document.getElementById('remove-file').style.display = 'none';
-            document.getElementById('attach-button').textContent = '📎 Attach JSON';
+            document.getElementById('attach-button').textContent = '📎 Attach Design';
         }
 
         function clearChat() {
@@ -477,8 +477,8 @@
                 
                 // Keep the Plotly visualization and toggle visible when switching to Design Mode
                 // Don't clear the visualization - preserve it for the user
-                addMessageToChat('🍣 **Advanced Mode Enabled** - Now using LangGraph AI for sushi restaurant recommendations in Munich!', 'ai');
-                addMessageToChat('Ask me about the best sushi restaurants, weather conditions, or parking spots in Munich.', 'ai');
+                addMessageToChat('🍣 **Advanced Mode Enabled** - Now using LangGraph to check and update my tasks!', 'ai');
+                addMessageToChat('Ask me about my pending tasks, or any other task you need help with.', 'ai');
                 
                 // Update UI for LangGraph mode
                 updateUIForLangGraph();
@@ -533,7 +533,7 @@
         function updateUIForLangGraph() {
             // Update placeholder text for LangGraph mode
             const userInput = document.getElementById('user-input');
-            userInput.placeholder = 'Ask about sushi restaurants, weather, or parking in Munich...';
+            userInput.placeholder = 'Ask about tasks';
             
             // Update toggle text
             const toggleText = document.querySelector('.toggle-text');

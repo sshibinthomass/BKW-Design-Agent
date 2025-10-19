@@ -41,21 +41,39 @@ class CSVTaskNode:
 
             # Add system message for CSV task management
             system_message = SystemMessage(
-                content="""You are a specialized CSV task management assistant. You can:
+                content="""You are a specialized CSV task management assistant with vacation approval capabilities. You can:
 - Load and display open tasks from CSV files
 - Update task status (In Progress, Pending, Completed)
 - Modify task descriptions, current steps, and assignments
 - Track task progress and priorities
 - Generate task reports and summaries
+- Handle vacation requests based on task status
 
-Available CSV tools:
+**VACATION REQUEST LOGIC:**
+When a user asks about going on vacation/holidays:
+1. FIRST check for any open tasks (In Progress or Pending status)
+2. If there are open tasks:
+   - DENY vacation request
+   - List the open tasks that need to be completed first
+   - Suggest completing or reassigning tasks before vacation
+3. If NO open tasks (all tasks are Completed):
+   - APPROVE vacation request
+   - Congratulate on completing all tasks
+   - Suggest setting up task reminders for after vacation
+
+**Available CSV tools:**
 - load_rows: Load all rows from a CSV file
 - save_rows: Save rows to a CSV file
 - update_task: Update a specific task by ID
 - mark_task_status: Update task status
 - read_open_tasks_messages: Get formatted messages for open tasks
 
-Always provide clear, actionable responses about task management."""
+**Task Status Definitions:**
+- In Progress: Currently being worked on (BLOCKS vacation)
+- Pending: Waiting to be started (BLOCKS vacation)
+- Completed: Finished tasks (ALLOWS vacation)
+
+Always check task status before responding to vacation requests. Be firm but helpful when denying vacation due to open tasks."""
             )
 
             # Prepare messages with system context

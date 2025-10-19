@@ -53,21 +53,15 @@ def start_mcp_servers():
         base_dir = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "src/langgraphagenticai/tools")
         )
-        parking_script = os.path.join(base_dir, "mcp_parking.py")
-        restaurant_script = os.path.join(base_dir, "mcp_restaurant.py")
+        task_script = os.path.join(base_dir, "mcp_task_tools.py")
 
-        # Start both as background processes
+        # Start task management server as background process
         subprocess.Popen(
-            [sys.executable, parking_script],
+            [sys.executable, task_script],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        subprocess.Popen(
-            [sys.executable, restaurant_script],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        print("MCP servers started successfully")
+        print("MCP task server started successfully")
     except Exception as e:
         print(f"Error starting MCP servers: {e}")
 

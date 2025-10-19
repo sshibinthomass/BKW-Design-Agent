@@ -79,28 +79,70 @@ def get_all_tasks() -> List[Dict]:
         List[Dict]: All tasks with their details
     """
     try:
-        return load_tasks()
+        tasks = load_tasks()
+        if not tasks:
+            return [{"message": "No tasks found in the system", "task_count": 0}]
+        return tasks
+    except FileNotFoundError as e:
+        return [
+            {
+                "error": f"Task file not found: {str(e)}",
+                "suggestion": "Please ensure the Task.csv file exists in the data directory",
+            }
+        ]
+    except PermissionError as e:
+        return [
+            {
+                "error": f"Permission denied accessing task file: {str(e)}",
+                "suggestion": "Please check file permissions",
+            }
+        ]
     except Exception as e:
-        return [{"error": str(e)}]
+        return [
+            {
+                "error": f"Unexpected error loading tasks: {str(e)}",
+                "suggestion": "Please check the task file format and try again",
+            }
+        ]
 
 
 @mcp.tool()
-def get_task_by_id(task_id: str) -> Optional[Dict]:
+def get_task_by_id(task_id: str) -> Dict:
     """
     Get a specific task by its ID.
     Args:
         task_id (str): The Task ID to search for
     Returns:
-        Dict: Task details or None if not found
+        Dict: Task details or error message
     """
     try:
+        if not task_id or not task_id.strip():
+            return {
+                "error": "Task ID cannot be empty",
+                "suggestion": "Please provide a valid task ID",
+            }
+
         tasks = load_tasks()
         for task in tasks:
-            if task.get("Task ID") == task_id:
+            if task.get("Task ID") == task_id.strip():
                 return task
-        return None
+
+        return {
+            "error": f"Task with ID '{task_id}' not found",
+            "suggestion": "Please check the task ID and try again",
+            "available_tasks": [t.get("Task ID") for t in tasks[:5]],
+        }
+
+    except FileNotFoundError as e:
+        return {
+            "error": f"Task file not found: {str(e)}",
+            "suggestion": "Please ensure the Task.csv file exists",
+        }
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "error": f"Error retrieving task: {str(e)}",
+            "suggestion": "Please try again or check the task file",
+        }
 
 
 @mcp.tool()
@@ -113,10 +155,47 @@ def get_tasks_by_status(status: str) -> List[Dict]:
         List[Dict]: Tasks with the specified status
     """
     try:
+        if not status or not status.strip():
+            return [
+                {
+                    "error": "Status cannot be empty",
+                    "suggestion": "Please provide a valid status (e.g., 'In Progress', 'Pending', 'Completed')",
+                }
+            ]
+
         tasks = load_tasks()
-        return [task for task in tasks if task.get("Task Status") == status]
+        filtered_tasks = [
+            task for task in tasks if task.get("Task Status") == status.strip()
+        ]
+
+        if not filtered_tasks:
+            available_statuses = list(
+                set(task.get("Task Status", "Unknown") for task in tasks)
+            )
+            return [
+                {
+                    "message": f"No tasks found with status '{status}'",
+                    "available_statuses": available_statuses,
+                    "task_count": 0,
+                }
+            ]
+
+        return filtered_tasks
+
+    except FileNotFoundError as e:
+        return [
+            {
+                "error": f"Task file not found: {str(e)}",
+                "suggestion": "Please ensure the Task.csv file exists",
+            }
+        ]
     except Exception as e:
-        return [{"error": str(e)}]
+        return [
+            {
+                "error": f"Error filtering tasks by status: {str(e)}",
+                "suggestion": "Please try again or check the task file",
+            }
+        ]
 
 
 @mcp.tool()
@@ -129,9 +208,35 @@ def get_open_tasks() -> List[Dict]:
     try:
         tasks = load_tasks()
         open_statuses = {"In Progress", "Pending"}
-        return [task for task in tasks if task.get("Task Status") in open_statuses]
+        open_tasks = [
+            task for task in tasks if task.get("Task Status") in open_statuses
+        ]
+
+        if not open_tasks:
+            return [
+                {
+                    "message": "No open tasks found - all tasks are completed!",
+                    "task_count": 0,
+                    "vacation_eligible": True,
+                }
+            ]
+
+        return open_tasks
+
+    except FileNotFoundError as e:
+        return [
+            {
+                "error": f"Task file not found: {str(e)}",
+                "suggestion": "Please ensure the Task.csv file exists",
+            }
+        ]
     except Exception as e:
-        return [{"error": str(e)}]
+        return [
+            {
+                "error": f"Error retrieving open tasks: {str(e)}",
+                "suggestion": "Please try again or check the task file",
+            }
+        ]
 
 
 @mcp.tool()
@@ -169,54 +274,132 @@ def get_tasks_by_priority(priority: str) -> List[Dict]:
 
 
 @mcp.tool()
-def update_task_status(task_id: str, new_status: str) -> bool:
+def update_task_status(task_id: str, new_status: str) -> Dict:
     """
     Update the status of a specific task.
     Args:
         task_id (str): The Task ID to update
         new_status (str): New status value
     Returns:
-        bool: True if updated successfully, False if task not found
+        Dict: Success/error message with details
     """
     try:
+        if not task_id or not task_id.strip():
+            return {
+                "error": "Task ID cannot be empty",
+                "suggestion": "Please provide a valid task ID",
+            }
+
+        if not new_status or not new_status.strip():
+            return {
+                "error": "New status cannot be empty",
+                "suggestion": "Please provide a valid status (e.g., 'In Progress', 'Pending', 'Completed')",
+            }
+
         tasks = load_tasks()
         original_columns = list(tasks[0].keys()) if tasks else []
+        task_id = task_id.strip()
+        new_status = new_status.strip()
 
         updated = False
+        task_found = False
         for task in tasks:
             if task.get("Task ID") == task_id:
+                task_found = True
+                old_status = task.get("Task Status", "Unknown")
                 task["Task Status"] = new_status
                 updated = True
                 break
 
+        if not task_found:
+            available_tasks = [t.get("Task ID") for t in tasks[:5]]
+            return {
+                "error": f"Task with ID '{task_id}' not found",
+                "suggestion": "Please check the task ID",
+                "available_tasks": available_tasks,
+            }
+
         if updated:
             save_tasks(tasks, original_columns)
+            return {
+                "success": True,
+                "message": f"Task {task_id} status updated from '{old_status}' to '{new_status}'",
+                "task_id": task_id,
+                "old_status": old_status,
+                "new_status": new_status,
+            }
+        else:
+            return {
+                "error": f"Failed to update task {task_id}",
+                "suggestion": "Please try again",
+            }
 
-        return updated
+    except FileNotFoundError as e:
+        return {
+            "error": f"Task file not found: {str(e)}",
+            "suggestion": "Please ensure the Task.csv file exists",
+        }
+    except PermissionError as e:
+        return {
+            "error": f"Permission denied saving task file: {str(e)}",
+            "suggestion": "Please check file permissions",
+        }
     except Exception as e:
-        return False
+        return {
+            "error": f"Error updating task status: {str(e)}",
+            "suggestion": "Please try again or check the task file",
+        }
 
 
 @mcp.tool()
-def update_task(task_id: str, updates: Dict[str, str]) -> bool:
+def update_task(task_id: str, updates: Dict[str, str]) -> Dict:
     """
     Update a task with multiple field changes.
     Args:
         task_id (str): The Task ID to update
         updates (Dict[str, str]): Dictionary of field-value pairs to update
     Returns:
-        bool: True if updated successfully, False if task not found
+        Dict: Success/error message with details
     """
     try:
+        if not task_id or not task_id.strip():
+            return {
+                "error": "Task ID cannot be empty",
+                "suggestion": "Please provide a valid task ID",
+            }
+
+        if not updates or not isinstance(updates, dict):
+            return {
+                "error": "Updates must be a non-empty dictionary",
+                "suggestion": "Please provide field-value pairs to update",
+            }
+
         tasks = load_tasks()
         original_columns = list(tasks[0].keys()) if tasks else []
+        task_id = task_id.strip()
 
         updated = False
+        task_found = False
+        old_values = {}
+
         for task in tasks:
             if task.get("Task ID") == task_id:
+                task_found = True
+                # Store old values for comparison
+                for field in updates.keys():
+                    old_values[field] = task.get(field, "")
+
                 task.update(updates)
                 updated = True
                 break
+
+        if not task_found:
+            available_tasks = [t.get("Task ID") for t in tasks[:5]]
+            return {
+                "error": f"Task with ID '{task_id}' not found",
+                "suggestion": "Please check the task ID",
+                "available_tasks": available_tasks,
+            }
 
         if updated:
             # Determine new column order (preserve original, add new columns at end)
@@ -229,48 +412,147 @@ def update_task(task_id: str, updates: Dict[str, str]) -> bool:
 
             save_tasks(tasks, field_order)
 
-        return updated
+            changes = []
+            for field, new_value in updates.items():
+                old_value = old_values.get(field, "")
+                changes.append(f"{field}: '{old_value}' → '{new_value}'")
+
+            return {
+                "success": True,
+                "message": f"Task {task_id} updated successfully",
+                "task_id": task_id,
+                "changes": changes,
+                "updated_fields": list(updates.keys()),
+            }
+        else:
+            return {
+                "error": f"Failed to update task {task_id}",
+                "suggestion": "Please try again",
+            }
+
+    except FileNotFoundError as e:
+        return {
+            "error": f"Task file not found: {str(e)}",
+            "suggestion": "Please ensure the Task.csv file exists",
+        }
+    except PermissionError as e:
+        return {
+            "error": f"Permission denied saving task file: {str(e)}",
+            "suggestion": "Please check file permissions",
+        }
     except Exception as e:
-        return False
+        return {
+            "error": f"Error updating task: {str(e)}",
+            "suggestion": "Please try again or check the task file",
+        }
 
 
 @mcp.tool()
-def assign_task_to_engineer(task_id: str, engineer_name: str) -> bool:
+def assign_task_to_engineer(task_id: str, engineer_name: str) -> Dict:
     """
     Assign a task to a specific engineer.
     Args:
         task_id (str): The Task ID to assign
         engineer_name (str): Name of the engineer to assign to
     Returns:
-        bool: True if assigned successfully, False if task not found
+        Dict: Success/error message with details
     """
-    return update_task(task_id, {"Assigned Engineer": engineer_name})
+    try:
+        if not engineer_name or not engineer_name.strip():
+            return {
+                "error": "Engineer name cannot be empty",
+                "suggestion": "Please provide a valid engineer name",
+            }
+
+        result = update_task(task_id, {"Assigned Engineer": engineer_name.strip()})
+
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"Task {task_id} assigned to {engineer_name}",
+                "task_id": task_id,
+                "engineer": engineer_name,
+            }
+        else:
+            return result
+
+    except Exception as e:
+        return {
+            "error": f"Error assigning task: {str(e)}",
+            "suggestion": "Please try again",
+        }
 
 
 @mcp.tool()
-def set_task_priority(task_id: str, priority: str) -> bool:
+def set_task_priority(task_id: str, priority: str) -> Dict:
     """
     Set the priority of a specific task.
     Args:
         task_id (str): The Task ID to update
         priority (str): Priority level (e.g., 'High', 'Medium', 'Low')
     Returns:
-        bool: True if updated successfully, False if task not found
+        Dict: Success/error message with details
     """
-    return update_task(task_id, {"Priority": priority})
+    try:
+        if not priority or not priority.strip():
+            return {
+                "error": "Priority cannot be empty",
+                "suggestion": "Please provide a valid priority (e.g., 'High', 'Medium', 'Low')",
+            }
+
+        result = update_task(task_id, {"Priority": priority.strip()})
+
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"Task {task_id} priority set to {priority}",
+                "task_id": task_id,
+                "priority": priority,
+            }
+        else:
+            return result
+
+    except Exception as e:
+        return {
+            "error": f"Error setting task priority: {str(e)}",
+            "suggestion": "Please try again",
+        }
 
 
 @mcp.tool()
-def update_task_step(task_id: str, current_step: str) -> bool:
+def update_task_step(task_id: str, current_step: str) -> Dict:
     """
     Update the current step of a specific task.
     Args:
         task_id (str): The Task ID to update
         current_step (str): New current step description
     Returns:
-        bool: True if updated successfully, False if task not found
+        Dict: Success/error message with details
     """
-    return update_task(task_id, {"Current Step": current_step})
+    try:
+        if not current_step or not current_step.strip():
+            return {
+                "error": "Current step cannot be empty",
+                "suggestion": "Please provide a valid step description",
+            }
+
+        result = update_task(task_id, {"Current Step": current_step.strip()})
+
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": f"Task {task_id} current step updated",
+                "task_id": task_id,
+                "current_step": current_step,
+            }
+        else:
+            return result
+
+    except Exception as e:
+        return {
+            "error": f"Error updating task step: {str(e)}",
+            "suggestion": "Please try again",
+        }
 
 
 @mcp.tool()
@@ -452,6 +734,114 @@ def get_task_statistics() -> Dict:
         }
     except Exception as e:
         return {"error": str(e)}
+
+
+@mcp.tool()
+def check_vacation_eligibility() -> Dict:
+    """
+    Check if the user is eligible for vacation based on open tasks.
+    Returns:
+        Dict: Vacation eligibility status with details
+    """
+    try:
+        tasks = load_tasks()
+        open_statuses = {"In Progress", "Pending"}
+        open_tasks = [
+            task for task in tasks if task.get("Task Status") in open_statuses
+        ]
+
+        if not open_tasks:
+            return {
+                "vacation_eligible": True,
+                "message": "✅ VACATION APPROVED! All tasks are completed.",
+                "task_count": len(tasks),
+                "open_tasks": 0,
+                "completed_tasks": len(
+                    [t for t in tasks if t.get("Task Status") == "Completed"]
+                ),
+                "suggestion": "Enjoy your vacation! Consider setting up task reminders for when you return.",
+            }
+        else:
+            return {
+                "vacation_eligible": False,
+                "message": "❌ VACATION DENIED! You have open tasks that need to be completed first.",
+                "task_count": len(tasks),
+                "open_tasks": len(open_tasks),
+                "blocking_tasks": [
+                    {
+                        "task_id": task.get("Task ID"),
+                        "description": task.get("Task Description"),
+                        "status": task.get("Task Status"),
+                        "current_step": task.get("Current Step"),
+                        "engineer": task.get("Assigned Engineer", "Unassigned"),
+                    }
+                    for task in open_tasks
+                ],
+                "suggestion": "Complete or reassign these tasks before requesting vacation again.",
+            }
+
+    except FileNotFoundError as e:
+        return {
+            "error": f"Task file not found: {str(e)}",
+            "suggestion": "Please ensure the Task.csv file exists",
+        }
+    except Exception as e:
+        return {
+            "error": f"Error checking vacation eligibility: {str(e)}",
+            "suggestion": "Please try again or check the task file",
+        }
+
+
+@mcp.tool()
+def get_vacation_request_response() -> str:
+    """
+    Get a formatted response for vacation requests based on current task status.
+    Returns:
+        str: Formatted vacation request response
+    """
+    try:
+        eligibility = check_vacation_eligibility()
+
+        if eligibility.get("vacation_eligible"):
+            return f"""🎉 **VACATION REQUEST APPROVED!**
+
+Congratulations! You have completed all your tasks and are eligible for vacation.
+
+**Task Summary:**
+- Total Tasks: {eligibility.get("task_count", 0)}
+- Completed Tasks: {eligibility.get("completed_tasks", 0)}
+- Open Tasks: {eligibility.get("open_tasks", 0)}
+
+**Next Steps:**
+- Set up task reminders for when you return
+- Consider delegating any new incoming tasks
+- Enjoy your well-deserved break! 🏖️
+
+Have a great vacation!"""
+
+        else:
+            blocking_tasks = eligibility.get("blocking_tasks", [])
+            task_list = []
+            for task in blocking_tasks:
+                task_list.append(
+                    f"• **{task['task_id']}**: {task['description']} (Status: {task['status']})"
+                )
+
+            return f"""❌ **VACATION REQUEST DENIED**
+
+You currently have {eligibility.get("open_tasks", 0)} open tasks that need to be completed before vacation:
+
+{chr(10).join(task_list)}
+
+**To become eligible for vacation:**
+1. Complete these tasks or reassign them to colleagues
+2. Update task status to "Completed" when finished
+3. Then request vacation again
+
+I can help you complete these tasks or reassign them if needed."""
+
+    except Exception as e:
+        return f"❌ Error processing vacation request: {str(e)}\n\nPlease try again or contact support if the issue persists."
 
 
 if __name__ == "__main__":

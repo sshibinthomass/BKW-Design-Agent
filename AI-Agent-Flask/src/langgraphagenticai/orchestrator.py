@@ -8,7 +8,8 @@ from typing_extensions import Literal
 from pydantic import BaseModel, Field
 from langchain_core.messages import HumanMessage, SystemMessage
 from typing_extensions import TypedDict
-from langchain_groq import ChatGroq
+
+# from langchain_groq import ChatGroq  # Unused after switching to Gemini
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from langgraph.constants import Send
@@ -26,7 +27,7 @@ os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY")
 
 # llm=ChatOpenAI(model="gpt-4.1-mini")
 # llm=ChatGroq(model="llama-3.3-70b-versatile")
-llm = ChatGroq(model="openai/gpt-oss-20b")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
 
 
 # Schema for structured output to use in planning
@@ -63,93 +64,109 @@ class WorkerState(TypedDict):
 
 # Nodes
 async def orchestrator(state: State):
-    """Orchestrator that generates a plan for the report"""
-    client = MultiServerMCPClient(
-        {
-            "restaurant": {
-                "url": "http://127.0.0.1:8002/mcp",
-                "transport": "streamable_http",
-            },
-            "Parking": {
-                "url": "http://127.0.0.1:8003/mcp",
-                "transport": "streamable_http",
-            },
-            "csv-tools": {
-                "url": "http://127.0.0.1:8004/mcp",
-                "transport": "streamable_http",
-            },
-        }
-    )
-    tools = await client.get_tools()
+    """Orchestrator that generates a plan for the task report"""
+    try:
+        client = MultiServerMCPClient(
+            {
+                "csv-tools": {
+                    "url": "http://127.0.0.1:8004/mcp",
+                    "transport": "streamable_http",
+                },
+            }
+        )
+        tools = await client.get_tools()
 
-    # Bind tools to LLM and then add structured output
-    llm_with_tools = llm.bind_tools(tools)
-    planner = llm_with_tools.with_structured_output(Sections)
+        # Bind tools to LLM and then add structured output
+        llm_with_tools = llm.bind_tools(tools)
+        planner = llm_with_tools.with_structured_output(Sections)
 
-    # Generate queries
-    report_sections = planner.invoke(
-        [
-            SystemMessage(
-                content="Generate a clear and organized list of five topics and descriptions of words 20 to 30 to include in a restaurant report. The report should cover the restaurant’s name and description, location, menu, parking options, contact details, Google reviews, nearby restaurants, and any other relevant information. Use available tools or knowledge if needed to suggest comprehensive and logical report sections."
+        # Generate queries
+        report_sections = planner.invoke(
+            [
+                SystemMessage(
+                    content="Generate a clear and organized list of five topics and descriptions of words 20 to 30 to include in a task management report. The report should cover task analysis, progress tracking, resource allocation, timeline management, and completion status. Use available tools or knowledge if needed to suggest comprehensive and logical report sections."
+                ),
+                HumanMessage(content=f"Here is the report topic: {state['topic']}"),
+            ]
+        )
+
+        print("Report Sections:", report_sections)
+
+        return {"sections": report_sections.sections}
+    except Exception as e:
+        print(f"Error in orchestrator: {e}")
+        # Return default sections if MCP connection fails
+        default_sections = [
+            Section(
+                name="Task Overview",
+                description="Overview of current tasks and their status",
             ),
-            HumanMessage(content=f"Here is the report topic: {state['topic']}"),
+            Section(
+                name="Progress Tracking",
+                description="Detailed progress analysis and completion rates",
+            ),
+            Section(
+                name="Resource Allocation",
+                description="Resource distribution and workload management",
+            ),
+            Section(
+                name="Timeline Management",
+                description="Schedule analysis and deadline tracking",
+            ),
+            Section(
+                name="Completion Status", description="Final status and next steps"
+            ),
         ]
-    )
-
-    print("Report Sections:", report_sections)
-
-    return {"sections": report_sections.sections}
+        return {"sections": default_sections}
 
 
 async def llm_call(state: WorkerState):
     """Worker writes a section of the report"""
-    client = MultiServerMCPClient(
-        {
-            "restaurant": {
-                "url": "http://127.0.0.1:8002/mcp",
-                "transport": "streamable_http",
-            },
-            "Parking": {
-                "url": "http://127.0.0.1:8003/mcp",
-                "transport": "streamable_http",
-            },
-            "csv-tools": {
-                "url": "http://127.0.0.1:8004/mcp",
-                "transport": "streamable_http",
-            },
-        }
-    )
-    tools = await client.get_tools()
-    agent = create_react_agent(llm, tools)
-    # Generate section
-    result = await agent.ainvoke(
-        {
-            "messages": [
-                SystemMessage(
-                    content="Using the provided topic and description, write a complete and well-structured section of words 100 to 150 for a restaurant report. Include relevant details and also the tools if needed. Use markdown formatting."
-                ),
-                HumanMessage(
-                    content=f"Here is the section name: {state['section'].name} and description: {state['section'].description}"
-                ),
-            ]
-        }
-    )
+    try:
+        client = MultiServerMCPClient(
+            {
+                "csv-tools": {
+                    "url": "http://127.0.0.1:8004/mcp",
+                    "transport": "streamable_http",
+                },
+            }
+        )
+        tools = await client.get_tools()
+        agent = create_react_agent(llm, tools)
+        # Generate section
+        result = await agent.ainvoke(
+            {
+                "messages": [
+                    SystemMessage(
+                        content="Using the provided topic and description, write a complete and well-structured section of words 100 to 150 for a task management report. Include relevant details and also the tools if needed. Use markdown formatting."
+                    ),
+                    HumanMessage(
+                        content=f"Here is the section name: {state['section'].name} and description: {state['section'].description}"
+                    ),
+                ]
+            }
+        )
 
-    # Extract the final message content from the agent response
-    if isinstance(result, dict) and "messages" in result:
-        final_message = result["messages"][-1]
-        section_content = final_message.content
-    elif hasattr(result, "messages"):
-        final_message = result.messages[-1]
-        section_content = final_message.content
-    else:
-        # Fallback: try to get content directly
-        section_content = str(result)
+        # Extract the final message content from the agent response
+        if isinstance(result, dict) and "messages" in result:
+            final_message = result["messages"][-1]
+            section_content = final_message.content
+        elif hasattr(result, "messages"):
+            final_message = result.messages[-1]
+            section_content = final_message.content
+        else:
+            # Fallback: try to get content directly
+            section_content = str(result)
 
-    print("Section:", section_content)
+        print("Section:", section_content)
 
-    # Return the correct dictionary format expected by LangGraph
-    return {"completed_sections": [section_content]}
+        # Return the correct dictionary format expected by LangGraph
+        return {"completed_sections": [section_content]}
+    except Exception as e:
+        print(f"Error in llm_call: {e}")
+        # Return a fallback section if MCP connection fails
+        fallback_content = f"## {state['section'].name}\n\n{state['section'].description}\n\n*Note: This section was generated without access to task management tools due to connection issues.*"
+        return {"completed_sections": [fallback_content]}
 
 
 # Conditional edge function to create llm_call workers that each write a section of the report
@@ -225,10 +242,16 @@ orchestrator_worker = orchestrator_worker_builder.compile()
 
 
 async def main():
-    state = await orchestrator_worker.ainvoke(
-        {"topic": "Create a report about the restaurant Sasou in Munich"}
-    )
-    print(f"\nReport saved to: {state['markdown_file']}")
+    try:
+        state = await orchestrator_worker.ainvoke(
+            {
+                "topic": "Create a task management report for project planning and execution"
+            }
+        )
+        print(f"\nReport saved to: {state['markdown_file']}")
+    except Exception as e:
+        print(f"Error in main: {e}")
+        print("Make sure the MCP task server is running on port 8004")
 
 
 # Run the async function

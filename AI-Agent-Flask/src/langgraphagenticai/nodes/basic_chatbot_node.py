@@ -192,14 +192,6 @@ class RestaurantRecommendationNode:
             # MultiServerMCPClient is a client that can connect to multiple MCP servers.
             client = MultiServerMCPClient(
                 {
-                    "restaurant": {
-                        "url": "http://127.0.0.1:8002/mcp",
-                        "transport": "streamable_http",
-                    },
-                    "Parking": {
-                        "url": "http://127.0.0.1:8003/mcp",
-                        "transport": "streamable_http",
-                    },
                     "csv-tools": {
                         "url": "http://127.0.0.1:8004/mcp",
                         "transport": "streamable_http",
@@ -467,14 +459,6 @@ class RestaurantRecommendationNode:
             # MultiServerMCPClient is a client that can connect to multiple MCP servers.
             client = MultiServerMCPClient(
                 {
-                    "restaurant": {
-                        "url": "http://127.0.0.1:8002/mcp",
-                        "transport": "streamable_http",
-                    },
-                    "Parking": {
-                        "url": "http://127.0.0.1:8003/mcp",
-                        "transport": "streamable_http",
-                    },
                     "csv-tools": {
                         "url": "http://127.0.0.1:8004/mcp",
                         "transport": "streamable_http",

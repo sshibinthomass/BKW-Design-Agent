@@ -13,7 +13,7 @@ import sys
 import os
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "AI-Agent-Flask"))
-from src.langgraphagenticai.LLMS.groqllm import GroqLLM
+from src.langgraphagenticai.LLMS.geminillm import GeminiLLM
 from src.langgraphagenticai.graph.graph_builder import GraphBuilder
 from src.langgraphagenticai.tools.return_prompt import return_prompt
 
@@ -183,7 +183,6 @@ def clear_session(session_id):
 
 @app.route("/api/langgraph/chat", methods=["POST"])
 def langgraph_chat_endpoint():
-    """LangGraph API endpoint for Sushi recommendations."""
     try:
         data = request.get_json()
         if not data:
@@ -199,30 +198,30 @@ def langgraph_chat_endpoint():
         if session_id not in langgraph_sessions:
             langgraph_sessions[session_id] = []
 
-        # Initialize LLM config for LangGraph (using Groq as default)
+        # Initialize LLM config for LangGraph (using Gemini as default)
         if session_id not in langgraph_llm_configs:
             try:
-                # Check if GROQ_API_KEY is available
-                groq_api_key = os.getenv("GROQ_API_KEY")
-                if not groq_api_key:
-                    logger.error("GROQ_API_KEY not found in environment variables")
+                # Check if GEMINI_API_KEY is available
+                gemini_api_key = os.getenv("GEMINI_API_KEY")
+                if not gemini_api_key:
+                    logger.error("GEMINI_API_KEY not found in environment variables")
                     return jsonify(
                         {
-                            "error": "GROQ_API_KEY not configured. Please set GROQ_API_KEY environment variable.",
+                            "error": "GEMINI_API_KEY not configured. Please set GEMINI_API_KEY environment variable.",
                             "action": "error",
-                            "llm_response": "LangGraph system requires GROQ_API_KEY to be configured. Please contact the administrator.",
+                            "llm_response": "LangGraph system requires GEMINI_API_KEY to be configured. Please contact the administrator.",
                             "require_user_input": True,
                         }
                     ), 500
 
-                # Use Groq as default LLM for LangGraph
+                # Use Gemini as default LLM for LangGraph
                 user_controls = {
-                    "selected_llm": "Groq",
-                    "selected_groq_model": "openai/gpt-oss-20b",
-                    "GROQ_API_KEY": groq_api_key,
+                    "selected_llm": "Gemini",
+                    "selected_gemini_model": "gemini-2.5-flash",
+                    "GEMINI_API_KEY": gemini_api_key,
                 }
                 logger.info(f"Initializing LangGraph LLM for session {session_id}")
-                llm_config = GroqLLM(user_contols_input=user_controls)
+                llm_config = GeminiLLM(user_controls_input=user_controls)
                 langgraph_llm_configs[session_id] = llm_config
                 logger.info("LangGraph LLM initialized successfully")
             except Exception as e:
@@ -242,8 +241,8 @@ def langgraph_chat_endpoint():
         # Get chat history
         chat_history = langgraph_sessions.get(session_id, [])
 
-        # Prepare messages with system prompt for Sushi usecase
-        system_prompt = return_prompt("Sushi")
+        # Prepare messages with system prompt for CSV Tasks usecase
+        system_prompt = return_prompt("CSV Tasks")
         messages = [{"role": "system", "content": system_prompt}]
 
         # Add chat history (last 20 messages)
@@ -267,7 +266,7 @@ def langgraph_chat_endpoint():
             graph_builder = GraphBuilder(
                 model=base_llm,
                 user_controls_input={
-                    "selected_llm": "Groq",
+                    "selected_llm": "Gemini",
                     "selected_usecase": "Sushi",
                 },
                 message=user_message,
@@ -389,33 +388,33 @@ def langgraph_chat_endpoint():
 def test_langgraph():
     """Test endpoint to verify LangGraph system is working."""
     try:
-        # Check if GROQ_API_KEY is available
-        groq_api_key = os.getenv("GROQ_API_KEY")
-        if not groq_api_key:
+        # Check if GEMINI_API_KEY is available
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
             return jsonify(
                 {
                     "status": "error",
-                    "message": "GROQ_API_KEY not configured",
-                    "groq_available": False,
+                    "message": "GEMINI_API_KEY not configured",
+                    "gemini_available": False,
                 }
             ), 500
 
-        # Try to initialize GroqLLM
+        # Try to initialize GeminiLLM
         user_controls = {
-            "selected_llm": "Groq",
-            "selected_groq_model": "llama-3.3-70b-versatile",
-            "GROQ_API_KEY": groq_api_key,
+            "selected_llm": "Gemini",
+            "selected_gemini_model": "gemini-2.5-flash",
+            "GEMINI_API_KEY": gemini_api_key,
         }
 
-        llm_config = GroqLLM(user_contols_input=user_controls)
+        llm_config = GeminiLLM(user_controls_input=user_controls)
         base_llm = llm_config.get_base_llm()
 
         return jsonify(
             {
                 "status": "success",
                 "message": "LangGraph system is properly configured",
-                "groq_available": True,
-                "llm_type": "Groq",
+                "gemini_available": True,
+                "llm_type": "Gemini",
             }
         )
 
@@ -428,7 +427,7 @@ def test_langgraph():
             {
                 "status": "error",
                 "message": f"LangGraph test failed: {str(e)}",
-                "groq_available": False,
+                "gemini_available": False,
             }
         ), 500
 
